@@ -9,16 +9,12 @@ import {
   SkipBack, 
   SkipForward,
   RotateCcw,
-  Volume2,
-  Settings,
   Repeat,
   Type
 } from 'lucide-react'
 import { useTypographerStore } from '@/lib/store/typographer-store'
 import { useTypographyStore } from '@/lib/store/typography-store'
-import { AnimationType } from '@/types/typographer'
 import { Button } from '@/components/ui/button'
-import { Slider } from '@/components/ui/slider'
 import { cn } from '@/lib/utils'
 
 interface ControlsProps {
@@ -31,18 +27,14 @@ export function Controls({ className }: ControlsProps) {
     currentTime,
     totalDuration,
     playbackSpeed,
-    wordGap,
     words,
     playAnimation,
     pauseAnimation,
-    seekTo,
-    setPlaybackSpeed,
-    setWordGap
+    seekTo
   } = useTypographerStore()
   
   const { showRightSidebar, toggleRightSidebar } = useTypographyStore()
 
-  const [volume, setVolume] = React.useState([80])
   const [isLooping, setIsLooping] = React.useState(true)
   const intervalRef = React.useRef<NodeJS.Timeout | null>(null)
 
@@ -198,41 +190,7 @@ export function Controls({ className }: ControlsProps) {
         <span>{formatTime(totalDuration)}</span>
       </div>
 
-      {/* Speed control */}
-      <div className="flex items-center gap-2 ml-4">
-        <span className="text-sm text-muted-foreground whitespace-nowrap">Speed:</span>
-        <div className="w-20">
-          <Slider
-            value={[playbackSpeed]}
-            onValueChange={(value) => setPlaybackSpeed(value[0])}
-            min={0.1}
-            max={3}
-            step={0.1}
-            className="cursor-pointer"
-          />
-        </div>
-        <span className="text-sm text-muted-foreground w-8 text-right">
-          {playbackSpeed.toFixed(1)}x
-        </span>
-      </div>
 
-      {/* Gap control */}
-      <div className="flex items-center gap-2 ml-4">
-        <span className="text-sm text-muted-foreground whitespace-nowrap">Gap:</span>
-        <div className="w-20">
-          <Slider
-            value={[wordGap]}
-            onValueChange={(value) => setWordGap(value[0])}
-            min={-2}
-            max={2}
-            step={0.1}
-            className="cursor-pointer"
-          />
-        </div>
-        <span className="text-sm text-muted-foreground w-10 text-right">
-          {wordGap >= 0 ? '+' : ''}{wordGap.toFixed(1)}s
-        </span>
-      </div>
     </div>
   )
 }

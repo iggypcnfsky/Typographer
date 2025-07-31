@@ -15,6 +15,8 @@ export function FontSelector() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showFontDialog, setShowFontDialog] = useState(false);
 
+
+
   const categories = ['all', 'serif', 'sans-serif', 'monospace', 'display', 'handwriting'];
 
   const filteredFonts = FONT_OPTIONS.filter(font => {
@@ -26,6 +28,8 @@ export function FontSelector() {
   const currentFont = FONT_OPTIONS.find(font => 
     settings.fontFamily.includes(font.name) || settings.fontFamily === font.family
   );
+
+
 
   const handleFontSelect = async (font: FontOption) => {
     if (font.isWebFont) {

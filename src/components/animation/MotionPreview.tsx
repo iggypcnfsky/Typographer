@@ -18,6 +18,12 @@ export function MotionPreview({ className }: MotionPreviewProps) {
   const { words, textContent, isPlaying, currentTime, setWordGap } = useTypographerStore()
   const { settings: typography } = useTypographyStore()
   const { settings: motionSettings, easingCurves, customEasingCurves } = useMotionStore()
+
+  // Force re-render when typography changes
+  const typographyKey = React.useMemo(() => {
+    return `${typography.fontFamily}-${typography.fontSize}-${typography.fontWeight}-${typography.letterSpacing}-${typography.lineHeight}-${typography.textColor}`
+  }, [typography.fontFamily, typography.fontSize, typography.fontWeight, typography.letterSpacing, typography.lineHeight, typography.textColor])
+
   const canvasRef = React.useRef<HTMLDivElement>(null)
   const animationEngineRef = React.useRef<AnimationEngine | null>(null)
 
@@ -92,16 +98,17 @@ export function MotionPreview({ className }: MotionPreviewProps) {
       {/* Animation Canvas - Clean background */}
       <div 
         ref={canvasRef}
+        data-animation-preview
         className="absolute inset-0 flex items-center justify-center bg-transparent"
         style={{ 
           perspective: '1000px',
           backgroundColor: typography.backgroundColor === 'transparent' ? 'transparent' : typography.backgroundColor,
         }}
       >
-        <AnimatePresence>
+        <AnimatePresence key={typographyKey}>
           {words.map((word) => (
             <AnimatedWord 
-              key={word.id} 
+              key={`${word.id}-${typographyKey}`} 
               word={word} 
               isPlaying={isPlaying}
               currentTime={currentTime}
@@ -138,7 +145,7 @@ interface AnimatedWordProps {
   customEasingCurves: any[]
 }
 
-function AnimatedWord({ word, isPlaying, currentTime, typography, motionSettings, easingCurves, customEasingCurves }: AnimatedWordProps) {
+const AnimatedWord = React.memo(function AnimatedWord({ word, isPlaying, currentTime, typography, motionSettings, easingCurves, customEasingCurves }: AnimatedWordProps) {
   const [shouldAnimate, setShouldAnimate] = React.useState(false)
   const [animationPhase, setAnimationPhase] = React.useState<'entry' | 'display' | 'exit' | 'complete'>('entry')
   
@@ -320,4 +327,4 @@ function AnimatedWord({ word, isPlaying, currentTime, typography, motionSettings
       )}
     </AnimatePresence>
   )
-}
+})

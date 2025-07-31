@@ -159,7 +159,7 @@ interface MotionConfig {
 ```typescript
 interface WordData {
   id: string
-  text: string
+  text: string // Can contain single words or grouped consecutive words without motion tags
   animation: AnimationType
   motionConfig?: MotionConfig // For motion language animations
   startTime: number
@@ -306,11 +306,12 @@ App
 - **Clean preview**: Transparent background with centered word positioning
 
 ### 3. Motion Language Processing Pipeline
-1. **Parse**: Extract motion language tags and clean text using improved regex
-2. **Validate**: Check motion syntax for 5-component format correctness  
-3. **Generate**: Create WordData with entry/exit speeds and display duration
-4. **Calculate**: Compute timing with configurable gaps (including negative)
-5. **Render**: Display clean text with perfect centering and phase-based animations
+1. **Parse**: Extract motion language tags and group consecutive words without motion tags
+2. **Group**: Combine adjacent words into single text layers until motion tag is encountered
+3. **Validate**: Check motion syntax for 5-component format correctness  
+4. **Generate**: Create WordData with entry/exit speeds and display duration for word groups
+5. **Calculate**: Compute timing with configurable gaps (including negative)
+6. **Render**: Display clean text with perfect centering and phase-based animations
 
 ## Features
 
@@ -397,6 +398,13 @@ App
 - [x] **Unlimited Input System** - Removed all hardcoded limits for maximum creative flexibility
 - [x] **Cross-store Synchronization** - Motion settings sync with typography and project stores
 - [x] **Text Centering Fix** - Resolved animation centering issues with proper transform handling
+- [x] **Typography Re-rendering Fix** - Fixed font changes not applying to animated words with React.memo optimization
+
+### Phase 6.1 Text Grouping Enhancement (Completed - January 2025)
+- [x] **Smart Text Grouping** - Consecutive words without motion tags are grouped into single text layers
+- [x] **Motion Language Parser Improvement** - Enhanced parsing logic to handle word grouping intelligently
+- [x] **WordData Interface Extension** - Support for multi-word text content in animation system
+- [x] **User Experience Enhancement** - Natural text behavior where "Hello Beautiful" displays as one unit
 
 ## File Structure
 ```

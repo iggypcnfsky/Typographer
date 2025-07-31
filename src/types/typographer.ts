@@ -38,7 +38,7 @@ export interface MotionConfig {
 
 export interface WordData {
   id: string
-  text: string
+  text: string // Can contain single words or grouped consecutive words without motion tags
   animation: AnimationType
   motionConfig?: MotionConfig // For motion language animations
   startTime: number

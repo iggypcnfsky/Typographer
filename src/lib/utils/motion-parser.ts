@@ -3,8 +3,9 @@ import { calculateWordPositions, createLayoutConfig } from './positioning'
 
 /**
  * Parse motion language syntax: <[EntrySpeed][EntryDirection][DisplayDuration][ExitDirection][ExitSpeed]>
- * Example: Hello <0.3F1.2F0.9> World means "Hello" enters from Front in 0.3s, displays 1.2s, exits Front in 0.9s
- * Motion tags apply to the word that PRECEDES them
+ * Example: Hello Beautiful <0.3F1.2F0.9> Beautiful <0.5L1.8F0.4> World <0.8R2.0B1.2>
+ * Groups consecutive words without motion tags into single text layers
+ * Motion tags apply to the word or word group that PRECEDES them
  */
 export function parseMotionLanguage(text: string): {
   words: WordData[]
@@ -16,33 +17,35 @@ export function parseMotionLanguage(text: string): {
   // First, extract clean text by removing all motion tags
   const cleanText = text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
   
-  // Split by spaces to get words and motion tags separately
-  const parts = text.split(/(\s+)/)
+  // Split text into tokens (words and motion tags)
+  const tokens = text.split(/(\s+|<[^>]*>)/).filter(token => token.trim())
   
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i].trim()
-    if (!part) continue
+  let i = 0
+  while (i < tokens.length) {
+    const token = tokens[i].trim()
     
-    // Check if this part is a motion tag with new format
-    const motionMatch = part.match(/^<(\d*\.?\d+)([LRFB])(\d*\.?\d+)([LRFB])(\d*\.?\d+)>$/)
+    // Check if this token is a motion tag
+    const motionMatch = token.match(/^<(\d*\.?\d+)([LRFB])(\d*\.?\d+)([LRFB])(\d*\.?\d+)>$/)
     if (motionMatch) {
-      // This is a motion tag - skip it (it will be processed when we find the preceding word)
+      // Skip motion tags - they'll be processed when we find the preceding text
+      i++
       continue
     }
     
-    // Check if this part is a word
-    if (/^\w+$/.test(part)) {
-      const wordText = part
+    // Check if this token is a word
+    if (/^\w+$/.test(token)) {
+      const textParts = [token]
       let motionConfig: MotionConfig | null = null
+      let j = i + 1
       
-      // Look ahead to see if the next non-whitespace token is a motion tag
-      for (let j = i + 1; j < parts.length; j++) {
-        const nextPart = parts[j].trim()
-        if (!nextPart) continue
+      // Look ahead to group consecutive words or find motion tag
+      while (j < tokens.length) {
+        const nextToken = tokens[j].trim()
         
-        const nextMotionMatch = nextPart.match(/^<(\d*\.?\d+)([LRFB])(\d*\.?\d+)([LRFB])(\d*\.?\d+)>$/)
+        // Check if next token is a motion tag
+        const nextMotionMatch = nextToken.match(/^<(\d*\.?\d+)([LRFB])(\d*\.?\d+)([LRFB])(\d*\.?\d+)>$/)
         if (nextMotionMatch) {
-          // Parse the motion tag and apply it to this word
+          // Found motion tag - parse it and apply to current text group
           const [, entrySpeedStr, entryDir, durationStr, exitDir, exitSpeedStr] = nextMotionMatch
           
           motionConfig = {
@@ -54,18 +57,28 @@ export function parseMotionLanguage(text: string): {
             entrySpeed: parseFloat(entrySpeedStr),
             exitSpeed: parseFloat(exitSpeedStr)
           }
+          j++ // Move past the motion tag
           break
-        } else {
-          // Found a non-motion token, stop looking
+        }
+        // Check if next token is a word (continue grouping)
+        else if (/^\w+$/.test(nextToken)) {
+          textParts.push(nextToken)
+          j++
+        }
+        // If it's neither a word nor motion tag, stop grouping
+        else {
           break
         }
       }
       
+      // Create word data for the text group
+      const groupedText = textParts.join(' ')
+      
       if (motionConfig) {
-        // Word with motion language
+        // Text group with motion language
         words.push({
           id: `word-${wordIndex}-${Date.now()}`,
-          text: wordText,
+          text: groupedText,
           animation: AnimationType.MOTION_LANGUAGE,
           motionConfig,
           startTime: 0, // Will be calculated later
@@ -75,10 +88,10 @@ export function parseMotionLanguage(text: string): {
           index: wordIndex
         })
       } else {
-        // Regular word without motion
+        // Regular text group without motion
         words.push({
           id: `word-${wordIndex}-${Date.now()}`,
-          text: wordText,
+          text: groupedText,
           animation: AnimationType.FADE_IN,
           startTime: 0,
           duration: 0.6,
@@ -89,6 +102,10 @@ export function parseMotionLanguage(text: string): {
       }
       
       wordIndex++
+      i = j // Move to next unprocessed token
+    } else {
+      // Skip non-word tokens (shouldn't happen with our regex)
+      i++
     }
   }
 

@@ -285,7 +285,7 @@ export const useProjectStore = create<ProjectStore>()(
         }
       },
 
-      exportProject: async (id: string, format: 'json' | 'text') => {
+      exportProject: async (id: string, format: 'json' | 'text' | 'lottie' | 'gif' | 'mp4') => {
         const state = get()
         const project = state.projects.find(p => p.id === id)
         
@@ -295,9 +295,16 @@ export const useProjectStore = create<ProjectStore>()(
 
         if (format === 'json') {
           return ProjectStorage.exportProject(project)
-        } else {
+        } else if (format === 'text') {
           // Export as plain text with motion language
           return project.textContent
+        } else {
+          // For video formats, return the project data for processing by ExportPanel
+          return JSON.stringify({
+            project,
+            format,
+            timestamp: Date.now()
+          })
         }
       },
 

@@ -7,6 +7,7 @@ import {
   MotionDirection, 
   ZoomType 
 } from '@/types/typographer'
+import { MotionSettings, EasingCurve } from '@/types/motion'
 import { 
   animationDefinitions, 
   easingCurves, 
@@ -18,16 +19,29 @@ import {
   MotionLanguageConfig, 
   WordAnimationConfig 
 } from './types'
+import { easingCurveToFramerMotion } from '@/lib/utils/motion-utils'
 
 /**
  * Animation Engine class that handles all animation logic
  */
 export class AnimationEngine {
   private canvas: HTMLElement | null = null
-  private activeAnimations: Map<string, any> = new Map()
+  private activeAnimations: Map<string, unknown> = new Map()
+  private motionSettings: MotionSettings | null = null
+  private customEasingCurves: EasingCurve[] = []
 
-  constructor(canvasElement?: HTMLElement) {
+  constructor(canvasElement?: HTMLElement, motionSettings?: MotionSettings, customEasingCurves?: EasingCurve[]) {
     this.canvas = canvasElement || null
+    this.motionSettings = motionSettings || null
+    this.customEasingCurves = customEasingCurves || []
+  }
+
+  /**
+   * Update motion settings for the engine
+   */
+  updateMotionSettings(settings: MotionSettings, customCurves: EasingCurve[] = []) {
+    this.motionSettings = settings
+    this.customEasingCurves = customCurves
   }
 
   /**
@@ -78,12 +92,15 @@ export class AnimationEngine {
   private generateStandardAnimation(word: WordData): WordAnimationConfig {
     const definition = animationDefinitions[word.animation]
     
+    // Apply global position offsets to standard animations
+    const variants = this.applyGlobalPositionToVariants(definition.variants, word.animation)
+    
     return {
       type: word.animation,
       startTime: word.startTime,
       duration: word.duration,
       position: word.position,
-      variants: definition.variants,
+      variants,
       transition: {
         duration: word.duration,
         ease: easingCurves[word.easing]?.curve || 'easeOut',
@@ -131,35 +148,122 @@ export class AnimationEngine {
   }
 
   /**
-   * Get transform values for motion directions
+   * Apply global position offsets to standard animation variants
+   */
+  private applyGlobalPositionToVariants(variants: AnimationVariants, animationType: AnimationType): AnimationVariants {
+    if (!this.motionSettings?.globalInitialPosition) {
+      return variants
+    }
+
+    const settings = this.motionSettings.globalInitialPosition
+    const modifiedVariants = { ...variants }
+
+    // Apply offsets based on animation type
+    if (modifiedVariants.initial) {
+      const initial = { ...modifiedVariants.initial }
+      
+      // Apply horizontal offsets for slide animations
+      if (animationType === AnimationType.SLIDE_LEFT && typeof initial.x === 'number') {
+        initial.x = settings.right // Use right position for slide left (coming from right)
+      } else if (animationType === AnimationType.SLIDE_RIGHT && typeof initial.x === 'number') {
+        initial.x = settings.left // Use left position for slide right (coming from left)
+      }
+      
+      // Apply vertical offsets for slide up/down animations
+      if (animationType === AnimationType.SLIDE_UP && typeof initial.y === 'number') {
+        // Keep original relative offset but apply speed multiplier if needed
+        initial.y = initial.y * (this.motionSettings?.speedMultiplier || 1)
+      } else if (animationType === AnimationType.SLIDE_DOWN && typeof initial.y === 'number') {
+        initial.y = initial.y * (this.motionSettings?.speedMultiplier || 1)
+      }
+      
+      // Apply scale offsets for scale-based animations
+      if ((animationType === AnimationType.SCALE_IN || animationType === AnimationType.ZOOM_IN) && typeof initial.scale === 'number') {
+        initial.scale = settings.front // Use front scale for scale-in animations
+      }
+      
+      // Apply scale offsets for bounce and other scale animations
+      if (animationType === AnimationType.BOUNCE && typeof initial.scale === 'number') {
+        initial.scale = settings.front // Use front scale for bounce animations
+      }
+      
+      modifiedVariants.initial = initial
+    }
+
+    return modifiedVariants
+  }
+
+  /**
+   * Get transform values for motion directions with global position settings
    */
   private getDirectionTransform(direction: MotionDirection): Record<string, number> {
+    const settings = this.motionSettings?.globalInitialPosition
+    
     switch (direction) {
       case MotionDirection.LEFT:
-        return { x: -100, y: 0, z: 0 } // Reduced from -200
+        return { 
+          x: settings?.left ?? -100, 
+          y: 0, 
+          z: 0,
+          scale: 1
+        }
       case MotionDirection.RIGHT:
-        return { x: 100, y: 0, z: 0 }  // Reduced from 200
+        return { 
+          x: settings?.right ?? 100, 
+          y: 0, 
+          z: 0,
+          scale: 1
+        }
       case MotionDirection.FRONT:
-        return { x: 0, y: 0, z: 100 }
+        return { 
+          x: 0, 
+          y: 0, 
+          z: 0,
+          scale: settings?.front ?? 0.6
+        }
       case MotionDirection.BACK:
-        return { x: 0, y: 0, z: -100 }
+        return { 
+          x: 0, 
+          y: 0, 
+          z: 0,
+          scale: settings?.back ?? 1.4
+        }
       default:
-        return { x: 0, y: 0, z: 0 }
+        return { x: 0, y: 0, z: 0, scale: 1 }
     }
   }
 
   /**
-   * Calculate motion animation duration based on speed
+   * Calculate motion animation duration based on speed and global multiplier
    */
   private calculateMotionDuration(speed: number): number {
     // Speed 0 = 2 seconds, Speed 99 = 0.1 seconds
-    return Math.max(0.1, 2 - (speed / 99) * 1.9)
+    const baseDuration = Math.max(0.1, 2 - (speed / 99) * 1.9)
+    const speedMultiplier = this.motionSettings?.speedMultiplier ?? 1.0
+    return baseDuration / speedMultiplier
   }
 
   /**
-   * Get appropriate easing for motion speed
+   * Get appropriate easing for motion speed using custom curves
    */
-  private getMotionEasing(speed: number): any {
+  private getMotionEasing(speed: number): string | number[] {
+    // Use default easing curve if set
+    const defaultEasingId = this.motionSettings?.defaultEasing
+    if (defaultEasingId) {
+      // Look for custom curve first
+      const customCurve = this.customEasingCurves.find(curve => curve.id === defaultEasingId)
+      if (customCurve) {
+        return easingCurveToFramerMotion(customCurve)
+      }
+      
+      // Fallback to built-in curves
+      const builtInCurve = easingCurves[defaultEasingId]
+      if (builtInCurve) {
+        return builtInCurve.curve
+      }
+    }
+    
+    // Fallback to speed-based easing
     if (speed < 30) {
       return 'easeInOut'
     } else if (speed < 70) {

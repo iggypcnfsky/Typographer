@@ -3,9 +3,9 @@
 import { AnimationType, MotionDirection, ZoomType } from '@/types/typographer'
 
 export interface AnimationVariants {
-  initial: any
-  animate: any
-  exit?: any
+  initial: Record<string, unknown>
+  animate: Record<string, unknown>
+  exit?: Record<string, unknown>
 }
 
 export interface EasingCurve {
@@ -46,10 +46,10 @@ export interface CollisionBounds {
 
 // Framer Motion specific types
 export interface MotionConfig {
-  initial: any
-  animate: any
-  exit?: any
-  transition: any
+  initial: Record<string, unknown>
+  animate: Record<string, unknown>
+  exit?: Record<string, unknown>
+  transition: Record<string, unknown>
 }
 
 // Motion Language Animation Configuration
@@ -69,5 +69,5 @@ export interface WordAnimationConfig {
   duration: number
   position: PositionCalculation
   variants: AnimationVariants
-  transition: any
+  transition: Record<string, unknown>
 }

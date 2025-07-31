@@ -128,10 +128,9 @@ export const useTypographerStore = create<TypographerStore>()(
         
         setWordGap: (gap: number) => {
           const state = get()
-          const newGap = Math.max(-2, Math.min(gap, 5)) // Allow negative gap for overlap (-2 to 5 seconds)
           
-          // Recalculate timing with new gap
-          const wordsWithTiming = calculateMotionTiming(state.words, newGap)
+          // Recalculate timing with new gap (no limits)
+          const wordsWithTiming = calculateMotionTiming(state.words, gap)
           const timeline = generateTimeline(wordsWithTiming)
           const totalDuration = Math.max(
             ...wordsWithTiming.map(word => word.startTime + word.duration),
@@ -139,7 +138,7 @@ export const useTypographerStore = create<TypographerStore>()(
           )
           
           set({
-            wordGap: newGap,
+            wordGap: gap,
             words: wordsWithTiming,
             timeline,
             totalDuration,

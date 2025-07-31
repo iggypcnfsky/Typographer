@@ -4,8 +4,10 @@ import * as React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTypographerStore } from '@/lib/store/typographer-store'
 import { useTypographyStore } from '@/lib/store/typography-store'
-import { AnimationType, WordData } from '@/types/typographer'
-import { animationEngine, createMotionConfig } from '@/lib/animations/engine'
+import { useMotionStore } from '@/lib/store/motion-store'
+import { WordData } from '@/types/typographer'
+import { AnimationEngine } from '@/lib/animations/engine'
+import { setSyncGapCallback } from '@/lib/store/motion-store'
 import { cn } from '@/lib/utils'
 
 interface MotionPreviewProps {
@@ -13,16 +15,56 @@ interface MotionPreviewProps {
 }
 
 export function MotionPreview({ className }: MotionPreviewProps) {
-  const { words, textContent, isPlaying, currentTime } = useTypographerStore()
+  const { words, textContent, isPlaying, currentTime, setWordGap } = useTypographerStore()
   const { settings: typography } = useTypographyStore()
+  const { settings: motionSettings, easingCurves, customEasingCurves } = useMotionStore()
   const canvasRef = React.useRef<HTMLDivElement>(null)
+  const animationEngineRef = React.useRef<AnimationEngine | null>(null)
 
-  // Set up animation engine with canvas reference
+  // Set up gap synchronization
   React.useEffect(() => {
-    if (canvasRef.current) {
-      animationEngine.setCanvas(canvasRef.current)
+    setSyncGapCallback(setWordGap)
+  }, [setWordGap])
+
+  // Initialize animation engine with motion settings
+  React.useEffect(() => {
+    if (canvasRef.current && motionSettings) {
+      const allEasingCurves = [...easingCurves, ...customEasingCurves]
+      animationEngineRef.current = new AnimationEngine(
+        canvasRef.current,
+        motionSettings,
+        allEasingCurves
+      )
     }
-  }, [])
+  }, [motionSettings, easingCurves, customEasingCurves])
+
+  // Update motion settings when they change
+  React.useEffect(() => {
+    if (animationEngineRef.current && motionSettings) {
+      const allEasingCurves = [...easingCurves, ...customEasingCurves]
+      animationEngineRef.current.updateMotionSettings(motionSettings, allEasingCurves)
+    }
+  }, [motionSettings, easingCurves, customEasingCurves])
+
+  // Trigger text re-parsing when motion settings change to apply to existing animations
+  const previousDefaultEasing = React.useRef(motionSettings?.defaultEasing)
+  const previousGlobalPosition = React.useRef(motionSettings?.globalInitialPosition)
+  const previousSpeedMultiplier = React.useRef(motionSettings?.speedMultiplier)
+  
+  React.useEffect(() => {
+    const easingChanged = motionSettings?.defaultEasing !== previousDefaultEasing.current
+    const positionChanged = JSON.stringify(motionSettings?.globalInitialPosition) !== JSON.stringify(previousGlobalPosition.current)
+    const speedChanged = motionSettings?.speedMultiplier !== previousSpeedMultiplier.current
+    
+    if ((easingChanged || positionChanged || speedChanged) && textContent) {
+      previousDefaultEasing.current = motionSettings?.defaultEasing
+      previousGlobalPosition.current = motionSettings?.globalInitialPosition
+      previousSpeedMultiplier.current = motionSettings?.speedMultiplier
+      
+      const { updateText } = useTypographerStore.getState()
+      updateText(textContent)
+    }
+  }, [motionSettings?.defaultEasing, motionSettings?.globalInitialPosition, motionSettings?.speedMultiplier, textContent])
 
   // Extract clean text without motion language tags
   const cleanText = textContent.replace(/<[^>]*>/g, '')
@@ -64,6 +106,9 @@ export function MotionPreview({ className }: MotionPreviewProps) {
               isPlaying={isPlaying}
               currentTime={currentTime}
               typography={typography}
+              motionSettings={motionSettings}
+              easingCurves={easingCurves}
+              customEasingCurves={customEasingCurves}
             />
           ))}
         </AnimatePresence>
@@ -88,9 +133,12 @@ interface AnimatedWordProps {
     textDecoration: 'none' | 'underline' | 'line-through'
     textTransform: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
   }
+  motionSettings: any
+  easingCurves: any[]
+  customEasingCurves: any[]
 }
 
-function AnimatedWord({ word, isPlaying, currentTime, typography }: AnimatedWordProps) {
+function AnimatedWord({ word, isPlaying, currentTime, typography, motionSettings, easingCurves, customEasingCurves }: AnimatedWordProps) {
   const [shouldAnimate, setShouldAnimate] = React.useState(false)
   const [animationPhase, setAnimationPhase] = React.useState<'entry' | 'display' | 'exit' | 'complete'>('entry')
   
@@ -128,8 +176,28 @@ function AnimatedWord({ word, isPlaying, currentTime, typography }: AnimatedWord
   // Show word at current state when paused or completed
   const isCompleted = currentTime > word.startTime + word.duration
 
+  // Resolve default easing to actual curve values
+  const speedMultiplier = motionSettings?.speedMultiplier ?? 1.0
+  const defaultEasingId = motionSettings?.defaultEasing ?? 'easeOut'
+  
+  let defaultEasing: string | number[] = 'easeOut'
+  if (defaultEasingId) {
+    // First check custom curves
+    const customCurve = customEasingCurves.find(curve => curve.id === defaultEasingId)
+    if (customCurve) {
+      defaultEasing = customCurve.cubicBezier
+    } else {
+      // Check built-in curves
+      const builtInCurve = easingCurves.find(curve => curve.id === defaultEasingId)
+      if (builtInCurve) {
+        defaultEasing = builtInCurve.cubicBezier
+      }
+    }
+  }
+
   // Create motion variants based on phase and motion config
   const getMotionVariants = () => {
+    
     if (word.motionConfig) {
       const { entryDirection, exitDirection } = word.motionConfig
       
@@ -138,63 +206,80 @@ function AnimatedWord({ word, isPlaying, currentTime, typography }: AnimatedWord
       
       return {
         initial: {
-          x: entryTransform.x === 0 ? '-50%' : entryTransform.x > 0 ? 'calc(-50% + 100px)' : 'calc(-50% - 100px)',
-          y: entryTransform.y === 0 ? '-50%' : entryTransform.y > 0 ? 'calc(-50% + 100px)' : 'calc(-50% - 100px)',
+          x: `calc(-50% + ${entryTransform.x}px)`,
+          y: `calc(-50% + ${entryTransform.y}px)`,
           z: entryTransform.z,
+          scale: entryTransform.scale,
           opacity: 0
         },
         animate: animationPhase === 'entry' ? {
           x: '-50%',
           y: '-50%',
           z: 0,
+          scale: 1,
           opacity: 1
         } : animationPhase === 'display' ? {
           x: '-50%',
           y: '-50%',
           z: 0,
+          scale: 1,
           opacity: 1
         } : animationPhase === 'complete' ? {
           x: '-50%',
           y: '-50%',
           z: 0,
+          scale: 1,
           opacity: 0.3
         } : { // exit phase
-          x: exitTransform.x === 0 ? '-50%' : exitTransform.x > 0 ? 'calc(-50% + 100px)' : 'calc(-50% - 100px)',
-          y: exitTransform.y === 0 ? '-50%' : exitTransform.y > 0 ? 'calc(-50% + 100px)' : 'calc(-50% - 100px)',
+          x: `calc(-50% + ${exitTransform.x}px)`,
+          y: `calc(-50% + ${exitTransform.y}px)`,
           z: exitTransform.z,
+          scale: exitTransform.scale,
           opacity: 0
         },
         transition: {
           duration: isPlaying ? (
-            animationPhase === 'entry' ? (word.motionConfig?.entrySpeed || 0.8) : 
-            animationPhase === 'display' ? 0.3 : 
-            (word.motionConfig?.exitSpeed || 0.8)
+            animationPhase === 'entry' ? (word.motionConfig?.entrySpeed || 0.8) / speedMultiplier : 
+            animationPhase === 'display' ? 0.3 / speedMultiplier : 
+            (word.motionConfig?.exitSpeed || 0.8) / speedMultiplier
           ) : 0, // No transition when paused
-          ease: animationPhase === 'entry' ? [0.25, 0.46, 0.45, 0.94] : // easeOutCubic for entry
-                animationPhase === 'display' ? [0.4, 0, 0.2, 1] : // easeInOut for display
-                [0.55, 0.085, 0.68, 0.53] // easeInCubic for exit
+          ease: defaultEasing
         }
       }
     } else {
-      // Default fade animation for non-motion words
+      // Standard animations for non-motion words - also use global settings
       return {
-        initial: { opacity: 0 },
-        animate: { opacity: 1 },
-        transition: { duration: 1, ease: 'easeOut' }
+        initial: { 
+          x: '-50%',
+          y: '-50%',
+          opacity: 0,
+          scale: motionSettings?.globalInitialPosition?.front ?? 0.8
+        },
+        animate: { 
+          x: '-50%',
+          y: '-50%',
+          opacity: 1,
+          scale: 1
+        },
+        transition: { 
+          duration: 1 / speedMultiplier, 
+          ease: defaultEasing 
+        }
       }
     }
   }
 
   const motionVariants = getMotionVariants()
 
-  // Helper function to get direction transforms
+  // Helper function to get direction transforms using global motion settings
   function getDirectionTransform(direction: string): Record<string, number> {
+    const settings = motionSettings?.globalInitialPosition
     switch (direction) {
-      case 'L': return { x: -100, y: 0, z: 0 } // Reduced from -200
-      case 'R': return { x: 100, y: 0, z: 0 }  // Reduced from 200
-      case 'F': return { x: 0, y: 0, z: 100 }
-      case 'B': return { x: 0, y: 0, z: -100 }
-      default: return { x: 0, y: 0, z: 0 }
+      case 'L': return { x: settings?.left ?? -100, y: 0, z: 0, scale: 1 }
+      case 'R': return { x: settings?.right ?? 100, y: 0, z: 0, scale: 1 }
+      case 'F': return { x: 0, y: 0, z: 0, scale: settings?.front ?? 0.6 }
+      case 'B': return { x: 0, y: 0, z: 0, scale: settings?.back ?? 1.4 }
+      default: return { x: 0, y: 0, z: 0, scale: 1 }
     }
   }
 

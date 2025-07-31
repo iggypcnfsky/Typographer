@@ -67,13 +67,9 @@ Typographer is an interactive tool that combines text input with real-time anima
 - Project templates
 - Export options
 
-**Right Sidebar**: Typography Settings
-- Font family selection
-- Font size controls
-- Letter spacing (kerning)
-- Line height adjustments
-- Text color palette
-- Background options
+**Right Sidebar**: Typography & Motion Settings
+- **Typography Tab**: Font family selection, size controls, letter spacing, line height, text colors, background options, typography presets
+- **Motion Tab**: Interactive easing curve editor, unlimited global position controls, animation speed multipliers, motion presets, real-time settings application
 
 ### 2. Core Modules
 
@@ -99,6 +95,10 @@ interface TypographerState {
   typography: TypographySettings
   showTypographySidebar: boolean
   
+  // Motion Settings
+  motion: MotionSettings
+  customEasingCurves: EasingCurve[]
+  
   // UI State
   showAnimationSelector: boolean
   selectedWord: string | null
@@ -118,6 +118,12 @@ interface TypographerState {
   
   // Typography Actions
   updateTypography: (settings: Partial<TypographySettings>) => void
+  
+  // Motion Actions
+  updateMotion: (settings: Partial<MotionSettings>) => void
+  createEasingCurve: (curve: EasingCurve) => void
+  updateEasingCurve: (id: string, curve: Partial<EasingCurve>) => void
+  deleteEasingCurve: (id: string) => void
 }
 ```
 
@@ -195,6 +201,30 @@ interface TypographySettings {
 }
 ```
 
+#### Motion Settings
+```typescript
+interface MotionSettings {
+  globalInitialPosition: {
+    left: number    // pixels from center for L direction
+    right: number   // pixels from center for R direction
+    front: number   // scale factor for F direction
+    back: number    // scale factor for B direction
+  }
+  speedMultiplier: number // global speed multiplier (0.1 - 5.0)
+  defaultEasing: string   // default easing curve ID
+  gapBetweenWords: number // default gap in seconds
+}
+
+interface EasingCurve {
+  id: string
+  name: string
+  description?: string
+  type: 'built-in' | 'custom'
+  cubicBezier: [number, number, number, number] // CSS cubic-bezier values
+  preview?: string // SVG path for visual preview
+}
+```
+
 ## User Flow
 
 ### 1. Immediate Demo Experience
@@ -247,12 +277,18 @@ App
 │   │       │   └── Timeline (with hover gap control)
 │   │       └── TextInputPanel
 │   │           └── TextEditor (with inline instructions)
-│   └── RightSidebar (Typography Settings)
-│       ├── FontSelector
-│       ├── SizeControls
-│       ├── SpacingControls
-│       ├── ColorPicker
-│       └── TextStyleOptions
+│   └── RightSidebar (Typography & Motion Settings)
+│       ├── TypographyTab
+│       │   ├── FontSelector
+│       │   ├── SizeControls
+│       │   ├── SpacingControls
+│       │   ├── ColorPicker
+│       │   └── TextStyleOptions
+│       └── MotionTab
+│           ├── EasingCurveEditor
+│           ├── GlobalPositionControls
+│           ├── SpeedMultiplierControl
+│           └── DefaultGapControl
 ```
 
 ### 2. Animation System
@@ -264,6 +300,8 @@ App
 - **Advanced easing curves**: Phase-specific cubic and quartic easing for professional feel
 - **Pause state preservation**: Words remain visible at current animation state when paused
 - **Optimized travel distance**: Reduced movement range for subtle, refined animations
+- **Customizable motion parameters**: Global initial position controls and custom easing curves
+- **Visual easing editor**: Interactive curve editor for creating professional animation feels
 - **Auto-loop**: Continuous playback with seamless restart
 - **Clean preview**: Transparent background with centered word positioning
 
@@ -298,9 +336,14 @@ App
 - [x] **Right sidebar typography system**
 - [x] **Google Fonts integration with 26 professional fonts**
 - [x] **Real-time typography controls and live preview**
+- [x] **Smooth professional animations without scale effects**
 
-### Advanced Features (Future)
-- [ ] Custom easing curve editor
+### Advanced Features ✅ COMPLETED
+- [x] **Custom easing curve editor** - Interactive Bezier curve editor with visual preview
+- [x] **Global motion controls** - Unlimited initial position settings and speed multipliers
+- [x] **Advanced motion settings** - Tabbed interface for typography vs motion with real-time application
+
+### Future Features
 - [ ] Export to video/GIF
 - [ ] Animation templates/presets
 - [ ] Collaborative editing
@@ -336,6 +379,25 @@ App
 - [x] **Modal Font Selection** - Clean, space-efficient font picker interface
 - [x] **Streamlined UI** - Removed redundant previews for focused live preview experience
 
+### Phase 5.3 Animation Quality Improvements (Completed - January 2025)
+- [x] **Removed Scale Animations** - Eliminated jarring POP effect from word animations
+- [x] **Smooth Opacity Transitions** - Clean fade in/out without scaling distortion
+- [x] **Pure Position Animation** - Only opacity and position changes for professional feel
+- [x] **Performance Optimization** - Fewer transform properties for better animation performance
+
+### Phase 6 Advanced Motion Controls (Completed - January 2025)
+- [x] **Motion Settings System** - Complete motion data architecture with Zustand store integration
+- [x] **Tabbed Right Sidebar** - Typography and Motion tabs with smooth state management
+- [x] **Global Position Controls** - Unlimited position settings for L/R/F/B directions with intelligent validation
+- [x] **Interactive Easing Curve Editor** - Visual Bezier curve editor with real-time preview and custom curve creation
+- [x] **Professional Easing Library** - 8 built-in curves plus unlimited custom curve management
+- [x] **Speed Multiplier System** - Global animation speed control affecting all animations simultaneously
+- [x] **Motion Presets** - Built-in motion profiles (Subtle, Dynamic, Dramatic) with instant application
+- [x] **Real-time Integration** - All motion settings apply instantly to animation preview with live feedback
+- [x] **Unlimited Input System** - Removed all hardcoded limits for maximum creative flexibility
+- [x] **Cross-store Synchronization** - Motion settings sync with typography and project stores
+- [x] **Text Centering Fix** - Resolved animation centering issues with proper transform handling
+
 ## File Structure
 ```
 src/
@@ -366,6 +428,11 @@ src/
   │   │   ├── ColorPicker.tsx
   │   │   ├── TextStyleOptions.tsx
   │   │   └── TypographyPresets.tsx
+  │   ├── motion/
+  │   │   ├── EasingCurveEditor.tsx
+  │   │   ├── GlobalPositionControls.tsx
+  │   │   ├── SpeedMultiplierControl.tsx
+  │   │   └── DefaultGapControl.tsx
 │   ├── sidebar/
 │   │   ├── LeftSidebar.tsx
 │   │   └── RightSidebar.tsx
@@ -375,7 +442,8 @@ src/
 │   ├── store/
 │   │   ├── typographer-store.ts # Main Zustand store
 │   │   ├── project-store.ts     # Project management store
-│   │   └── typography-store.ts  # Typography settings store
+│   │   ├── typography-store.ts  # Typography settings store
+│   │   └── motion-store.ts      # Motion settings and easing store
 │   ├── animations/
 │   │   ├── types.ts
 │   │   ├── presets.ts
@@ -388,11 +456,13 @@ src/
 │       ├── motion-parser.ts     # Motion language parser
 │       ├── timing-calculator.ts
 │       ├── typography-utils.ts  # Font loading, validation
+│       ├── motion-utils.ts      # Easing curve utilities
 │       └── cn.ts
 └── types/
     ├── typographer.ts          # Animation type definitions
     ├── project.ts             # Project management types
-    └── typography.ts          # Typography settings types
+    ├── typography.ts          # Typography settings types
+    └── motion.ts              # Motion settings and easing types
 ```
 
 ## Development Phases

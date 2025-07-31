@@ -23,7 +23,7 @@ import {
 export function ExportPanel() {
   const currentProject = useCurrentProject()
   const { exportProject } = useProjectStore()
-  const { words, textContent } = useTypographerStore()
+  const { words, textContent, totalDuration } = useTypographerStore()
   const { settings: typography } = useTypographyStore()
   const { settings: motionSettings, easingCurves, customEasingCurves } = useMotionStore()
   const [isExporting, setIsExporting] = React.useState<string | null>(null)
@@ -32,33 +32,7 @@ export function ExportPanel() {
   const [selectedAspectRatio, setSelectedAspectRatio] = React.useState<AspectRatio>('16:9')
   const [customDimensions, setCustomDimensions] = React.useState({ width: 1920, height: 1080 })
 
-  const handleExport = async (format: 'json' | 'text') => {
-    if (!currentProject) return
 
-    setIsExporting(format)
-    setError(null)
-
-    try {
-      const data = await exportProject(currentProject.id, format)
-      
-      // Create download
-      const blob = new Blob([data], { 
-        type: format === 'json' ? 'application/json' : 'text/plain' 
-      })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${currentProject.name}.${format === 'json' ? 'json' : 'txt'}`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Export failed')
-    } finally {
-      setIsExporting(null)
-    }
-  }
 
   const handleAdvancedExport = async (format: 'lottie' | 'gif' | 'mp4') => {
     if (!currentProject) return
@@ -86,7 +60,7 @@ export function ExportPanel() {
         // Convert to Lottie JSON
         const exportOptions: ExportOptions = {
           aspectRatio: selectedAspectRatio,
-          duration: 10,
+          duration: Math.max(totalDuration, 1), // Use actual animation duration with minimum of 1 second
           framerate: 30
         }
         
@@ -126,7 +100,8 @@ export function ExportPanel() {
           throw new Error('Animation preview not found. Please ensure the animation is visible.')
         }
         
-        setExportProgress('Recording GIF... This may take a moment.')
+        console.log('Found preview element:', previewElement)
+        console.log('Preview element dimensions:', previewElement.getBoundingClientRect())
         
         // Get dimensions based on aspect ratio
         const { width: exportWidth, height: exportHeight } = lottieConverter.calculateDimensions({ 
@@ -135,15 +110,25 @@ export function ExportPanel() {
           height: selectedAspectRatio === 'custom' ? customDimensions.height : undefined
         })
         
+        const finalWidth = Math.min(exportWidth, 1200) // Cap at reasonable size for GIF
+        const finalHeight = Math.min(exportHeight, 1200)
+        const duration = Math.max(totalDuration, 1) // Use actual animation duration with minimum of 1 second
+        
+        console.log(`GIF export settings: ${finalWidth}x${finalHeight}, ${duration}s duration`)
+        
+        setExportProgress(`Recording GIF ${finalWidth}x${finalHeight} for ${duration}s... You may be prompted to share your screen for best quality.`)
+        
         // Record GIF
         const result = await videoRecorder.recordGIF(previewElement, {
-          width: Math.min(exportWidth, 1200), // Cap at reasonable size for GIF
-          height: Math.min(exportHeight, 1200),
+          width: finalWidth,
+          height: finalHeight,
           framerate: 30,
-          duration: 10, // 10 seconds
-          quality: 10
+          duration: duration,
+          quality: 10,
+          backgroundColor: typography.backgroundColor === 'transparent' ? null : typography.backgroundColor
         })
         
+        console.log('GIF export completed:', result)
         downloadFile(result)
         
       } else if (format === 'mp4') {
@@ -169,7 +154,7 @@ export function ExportPanel() {
           width: exportWidth,
           height: exportHeight,
           framerate: 30,
-          duration: 10 // 10 seconds
+          duration: Math.max(totalDuration, 1) // Use actual animation duration with minimum of 1 second
         })
         
         downloadFile(result)
@@ -185,24 +170,6 @@ export function ExportPanel() {
 
   const exportOptions = [
     {
-      id: 'json',
-      title: 'Project File',
-      description: 'Complete project with all settings and animations',
-      icon: Code,
-      format: 'json' as const,
-      available: true,
-      category: 'basic'
-    },
-    {
-      id: 'text',
-      title: 'Motion Text',
-      description: 'Text content with motion language tags',
-      icon: FileText,
-      format: 'text' as const,
-      available: true,
-      category: 'basic'
-    },
-    {
       id: 'lottie',
       title: 'Lottie Animation',
       description: 'Export as Lottie JSON for web and mobile',
@@ -214,7 +181,7 @@ export function ExportPanel() {
     {
       id: 'gif',
       title: 'Animated GIF',
-      description: 'Export as animated GIF (Note: Currently exports as WebM video)',
+      description: 'Export as animated GIF with proper timing and aspect ratio',
       icon: ImageIcon,
       format: 'gif' as const,
       available: true,
@@ -223,7 +190,7 @@ export function ExportPanel() {
     {
       id: 'mp4',
       title: 'Video Animation',
-      description: 'Export as MP4 video using canvas recording (10 seconds)',
+      description: 'Export as MP4 video with animation duration',
       icon: Video,
       format: 'mp4' as const,
       available: true,
@@ -274,54 +241,6 @@ export function ExportPanel() {
       )}
 
       <div className="space-y-4">
-        {/* Basic Export Options */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-muted-foreground">Basic Export</h4>
-          
-          {exportOptions.filter(option => option.category === 'basic').map(option => {
-            const Icon = option.icon
-            const isLoading = isExporting === option.format
-            
-            return (
-              <div
-                key={option.id}
-                className="border rounded-lg p-3 space-y-3"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                    <Icon className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm">{option.title}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {option.description}
-                    </div>
-                  </div>
-                </div>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleExport(option.format)}
-                  disabled={isLoading}
-                  className="w-full"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Exporting...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4 mr-2" />
-                      Export
-                    </>
-                  )}
-                </Button>
-              </div>
-            )
-          })}
-        </div>
 
         {/* Export Settings */}
         <div className="space-y-3">
@@ -384,9 +303,9 @@ export function ExportPanel() {
           </div>
         </div>
 
-        {/* Advanced Export Options */}
+        {/* Export Options */}
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-muted-foreground">Advanced Export</h4>
+          <h4 className="text-sm font-medium text-muted-foreground">Export</h4>
           <div className="text-xs text-muted-foreground mb-3">
             These formats require an active animation preview. Make sure your animation is playing or visible.
           </div>
@@ -418,25 +337,44 @@ export function ExportPanel() {
                   </div>
                 </div>
                 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleAdvancedExport(option.format)}
-                  disabled={!hasWords || isLoading}
-                  className="w-full"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Exporting...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4 mr-2" />
-                      {hasWords ? 'Export' : 'Add Animation First'}
-                    </>
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAdvancedExport(option.format)}
+                    disabled={!hasWords || isLoading}
+                    className="w-full"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Exporting...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        {hasWords ? 'Export' : 'Add Animation First'}
+                      </>
+                    )}
+                  </Button>
+                  
+                  {/* Debug button for GIF testing */}
+                  {option.format === 'gif' && hasWords && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const previewElement = document.querySelector('[data-animation-preview]') as HTMLElement
+                        if (previewElement) {
+                          await videoRecorder.debugCapture(previewElement)
+                        }
+                      }}
+                      className="w-full text-xs"
+                    >
+                      Debug Capture
+                    </Button>
                   )}
-                </Button>
+                </div>
               </div>
             )
           })}
@@ -445,13 +383,10 @@ export function ExportPanel() {
 
       <div className="pt-4 border-t space-y-2 text-xs text-muted-foreground">
         <p>
-          <strong>Tip:</strong> JSON exports include all project settings and can be imported back into Typographer.
-        </p>
-        <p>
           <strong>Lottie:</strong> Use the JSON file with Lottie players for web, mobile, or After Effects.
         </p>
         <p>
-          <strong>Video/GIF:</strong> Recording captures 10 seconds of animation. Position the preview prominently for best results.
+          <strong>Video/GIF:</strong> Recording captures the full animation duration ({totalDuration.toFixed(1)}s). Position the preview prominently for best results.
         </p>
       </div>
     </div>

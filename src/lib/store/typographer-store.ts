@@ -216,3 +216,8 @@ export const useUIState = () => useTypographerStore(state => ({
   cursorPosition: state.cursorPosition,
   selectorPosition: state.selectorPosition
 }))
+
+// Make store globally available for GIF recording
+if (typeof window !== 'undefined') {
+  (window as any).__typographerStore = useTypographerStore
+}
